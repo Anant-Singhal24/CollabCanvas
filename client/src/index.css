@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Custom styles for canvas */
+.canvas-container {
+  @apply w-full h-full border border-gray-200 rounded-lg overflow-hidden;
+}
+
+/* Tool button styles */
+.tool-btn {
+  @apply p-2 rounded-md transition-colors;
+  @apply bg-white;
+  @apply border border-gray-200;
+  @apply hover:bg-gray-100;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500;
+}
+
+.tool-btn.active {
+  @apply bg-primary-100;
+  @apply border-primary-500;
+}
+
+/* Slider styles */
+.slider {
+  @apply w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer;
+}
+
+/* Modal styles */
+.modal {
+  @apply fixed inset-0 flex items-center justify-center z-50;
+  @apply bg-black bg-opacity-50;
+}
+
+.modal-content {
+  @apply bg-white p-6 rounded-lg shadow-lg max-w-md w-full;
+}
