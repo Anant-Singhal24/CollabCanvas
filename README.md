@@ -7,7 +7,7 @@ Whether you're brainstorming, teaching, or just sketching things out, CollabCanv
 
 ## 🚀 Live Demo
 
-🔗 [Try the Live App]([https://collabcanvas.yourdomain.com](https://collabcanvas-app.onrender.com)
+🔗  [Try the Live App](https://collabcanvas-app.onrender.com)
 ⏳ Please wait up to 1 minute during initial login. Our server may take a moment to wake up after inactivity. Thanks for your patience!
 
 ---
