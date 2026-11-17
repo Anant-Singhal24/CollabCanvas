@@ -8,6 +8,7 @@ const path = require("path");
 
 // Import routes
 const roomRoutes = require("./routes/room.routes");
+const Room = require("./models/Room");
 
 // Import socket handlers
 const socketHandlers = require("./socket/socketHandlers");
@@ -65,6 +66,40 @@ app.use("/api", roomRoutes);
 
 // Socket.IO handling
 socketHandlers(io);
+
+// Auto-cleanup: delete rooms inactive for 30 minutes and all their data
+const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
+
+const cleanupInactiveRooms = async () => {
+  try {
+    const thirtyMinutesAgo = new Date(Date.now() - INACTIVITY_LIMIT_MS);
+    const inactiveRooms = await Room.find({
+      $or: [
+        { lastActivity: { $lt: thirtyMinutesAgo } },
+        {
+          lastActivity: { $exists: false },
+          updatedAt: { $lt: thirtyMinutesAgo },
+        },
+      ],
+    });
+
+    for (const room of inactiveRooms) {
+      console.log(
+        `[Auto-Cleanup] Deleting room ${room._id} ("${room.name}") due to 30 min of inactivity`
+      );
+      // Notify any connected users
+      io.to(room._id.toString()).emit("room-deleted", {
+        message: "This board has been automatically closed after 30 minutes of inactivity.",
+      });
+      await Room.findByIdAndDelete(room._id);
+    }
+  } catch (err) {
+    console.error("Error during inactive room cleanup:", err);
+  }
+};
+
+// Check every 60 seconds
+setInterval(cleanupInactiveRooms, 60 * 1000);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === "production") {

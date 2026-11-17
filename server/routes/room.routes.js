@@ -39,12 +39,23 @@ router.post("/create-room", async (req, res) => {
   }
 });
 
-// Get all public rooms
+// Get all public rooms (active within the last 30 minutes)
 router.get("/public-rooms", async (req, res) => {
   try {
-    // Find public rooms, sort by creation date (newest first)
-    const publicRooms = await Room.find({ accessLevel: "public" })
-      .sort({ createdAt: -1 })
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+    // Find public rooms active within 30 minutes, sort by last activity / creation date (newest first)
+    const publicRooms = await Room.find({
+      accessLevel: "public",
+      $or: [
+        { lastActivity: { $gte: thirtyMinutesAgo } },
+        {
+          lastActivity: { $exists: false },
+          updatedAt: { $gte: thirtyMinutesAgo },
+        },
+      ],
+    })
+      .sort({ updatedAt: -1, createdAt: -1 })
       .limit(10);
 
     // Format the rooms
@@ -89,6 +100,21 @@ router.get("/room/:roomId", async (req, res) => {
         message: "Room not found",
       });
     }
+
+    // Check if room has been inactive for more than 30 minutes
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const lastActive = room.lastActivity || room.updatedAt || room.createdAt;
+    if (lastActive < thirtyMinutesAgo) {
+      await Room.findByIdAndDelete(roomId);
+      return res.status(404).json({
+        success: false,
+        message: "This board has been automatically deleted due to 30 minutes of inactivity.",
+      });
+    }
+
+    // Refresh lastActivity on room access
+    room.lastActivity = Date.now();
+    await room.save();
 
     res.status(200).json({
       success: true,

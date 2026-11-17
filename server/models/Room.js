@@ -43,6 +43,10 @@ const RoomSchema = new mongoose.Schema({
       },
     },
   ],
+  lastActivity: {
+    type: Date,
+    default: Date.now,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -53,10 +57,16 @@ const RoomSchema = new mongoose.Schema({
   },
 });
 
-// Update the updatedAt timestamp before saving
+// Update the updatedAt and lastActivity timestamps before saving
 RoomSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
+  if (!this.lastActivity) {
+    this.lastActivity = Date.now();
+  }
   next();
 });
+
+// Automatically expire/delete rooms from MongoDB 30 minutes (1800 seconds) after lastActivity
+RoomSchema.index({ lastActivity: 1 }, { expireAfterSeconds: 1800 });
 
 module.exports = mongoose.model("Room", RoomSchema);

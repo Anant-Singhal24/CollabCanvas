@@ -1,6 +1,19 @@
 const mongoose = require("mongoose");
 const Room = require("../models/Room");
 
+// Helper to touch lastActivity for 30 min inactivity tracking
+const updateRoomActivity = async (roomId) => {
+  try {
+    if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) return;
+    await Room.findByIdAndUpdate(roomId, {
+      lastActivity: Date.now(),
+      updatedAt: Date.now(),
+    });
+  } catch (err) {
+    console.error("Error updating room activity:", err);
+  }
+};
+
 module.exports = (io) => {
   io.on("connection", (socket) => {
     // Join room
@@ -19,6 +32,17 @@ module.exports = (io) => {
         if (!room) {
           console.error(`Room not found: ${roomId}`);
           socket.emit("room-error", { message: "Room not found" });
+          return;
+        }
+
+        // Check 30-min inactivity
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+        const lastActive = room.lastActivity || room.updatedAt || room.createdAt;
+        if (lastActive < thirtyMinutesAgo) {
+          await Room.findByIdAndDelete(roomId);
+          socket.emit("room-error", {
+            message: "This board has been automatically deleted due to 30 minutes of inactivity.",
+          });
           return;
         }
 
@@ -46,6 +70,7 @@ module.exports = (io) => {
           });
         }
 
+        room.lastActivity = Date.now();
         await room.save();
 
         // Notify room about new user
@@ -95,6 +120,7 @@ module.exports = (io) => {
         completed: completed || false,
         isEraser,
       });
+      updateRoomActivity(roomId);
     });
 
     // Handle real-time drawing updates
@@ -112,6 +138,16 @@ module.exports = (io) => {
         socketId: socket.id,
         userId: userId || socket.id,
       });
+      updateRoomActivity(roomId);
+    });
+
+    // Handle object modification (shifting/moving/scaling/rotating)
+    socket.on("object-modified", ({ roomId, objectData }) => {
+      socket.to(roomId).emit("object-modified", {
+        socketId: socket.id,
+        objectData,
+      });
+      updateRoomActivity(roomId);
     });
 
     // Handle object deletion
@@ -120,6 +156,7 @@ module.exports = (io) => {
         socketId: socket.id,
         objectId,
       });
+      updateRoomActivity(roomId);
     });
 
     // Handle canvas clear
@@ -128,6 +165,7 @@ module.exports = (io) => {
         if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) return;
         await Room.findByIdAndUpdate(roomId, {
           canvasData: "",
+          lastActivity: Date.now(),
           $push: {
             history: {
               action: "clear",
@@ -148,6 +186,7 @@ module.exports = (io) => {
         if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) return;
         await Room.findByIdAndUpdate(roomId, {
           canvasData,
+          lastActivity: Date.now(),
           updatedAt: Date.now(),
         });
       } catch (error) {
@@ -157,13 +196,13 @@ module.exports = (io) => {
 
     // Handle chat messages
     socket.on("send-message", ({ roomId, message, username }) => {
-      // Broadcast the message to all users in the room except sender
       socket.to(roomId).emit("receive-message", {
         socketId: socket.id,
         username,
         message,
         timestamp: Date.now(),
       });
+      updateRoomActivity(roomId);
     });
 
     // Handle room deletion notification

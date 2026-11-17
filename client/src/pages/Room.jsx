@@ -263,6 +263,12 @@ function Room() {
         .loadFromJSON(initialCanvasDataRef.current)
         .then(() => {
           canvas.backgroundColor = "#ffffff";
+          // Ensure every loaded object has an ID
+          canvas.getObjects().forEach((obj, idx) => {
+            if (!obj.id) {
+              obj.id = `obj_${idx}_${obj.type}`;
+            }
+          });
           canvas.renderAll();
         })
         .catch((e) => console.error("Error loading initial canvas:", e));
@@ -468,19 +474,38 @@ function Room() {
       debouncedSaveCanvas();
     };
 
-    // Object modified (moved, resized, rotated)
+    // Object modified (moved, resized, rotated via arrow select tool)
     const handleObjectModified = ({ target }) => {
       if (!target) return;
-      if (!target.id) {
-        target.id = generateId(target.type?.toLowerCase() || "obj");
-      }
 
-      if (socketRef.current) {
-        socketRef.current.emit("draw", {
-          roomId,
-          drawingData: JSON.stringify(target.toObject()),
-          completed: true,
-        });
+      if (
+        target.type === "activeSelection" ||
+        target.type === "ActiveSelection"
+      ) {
+        if (target.forEachObject) {
+          target.forEachObject((obj) => {
+            if (!obj.id) {
+              obj.id = generateId(obj.type?.toLowerCase() || "obj");
+            }
+            if (socketRef.current) {
+              socketRef.current.emit("object-modified", {
+                roomId,
+                objectData: JSON.stringify(obj.toObject()),
+              });
+            }
+          });
+        }
+      } else {
+        if (!target.id) {
+          target.id = generateId(target.type?.toLowerCase() || "obj");
+        }
+
+        if (socketRef.current) {
+          socketRef.current.emit("object-modified", {
+            roomId,
+            objectData: JSON.stringify(target.toObject()),
+          });
+        }
       }
       debouncedSaveCanvas();
     };
@@ -510,16 +535,12 @@ function Room() {
             liveMap.delete(socketId);
           }
 
-          // Check if object already exists (modified move/scale/edit)
-          const existing = data.id
-            ? canvas.getObjects().find((o) => o.id === data.id)
-            : null;
-
-          if (existing) {
-            existing.set(data);
-            existing.setCoords();
-            canvas.renderAll();
-            return;
+          // If object already exists, remove it first to eliminate duplicate copies
+          if (data.id) {
+            const existing = canvas.getObjects().find((o) => o.id === data.id);
+            if (existing) {
+              canvas.remove(existing);
+            }
           }
 
           // Otherwise enliven and add new object
@@ -534,6 +555,36 @@ function Room() {
           canvas.renderAll();
         } catch (err) {
           console.error("Error applying remote draw:", err);
+        }
+      });
+
+      // Handle object shifted/modified by other users
+      socket.on("object-modified", async ({ socketId, objectData }) => {
+        if (socketId === socket.id) return;
+        try {
+          const data =
+            typeof objectData === "string"
+              ? JSON.parse(objectData)
+              : objectData;
+          if (!data) return;
+
+          // Remove existing object at old position to prevent duplicates
+          if (data.id) {
+            const existing = canvas.getObjects().find((o) => o.id === data.id);
+            if (existing) {
+              canvas.remove(existing);
+            }
+          }
+
+          // Enliven and add object at the new position
+          const [updatedObj] = await util.enlivenObjects([data]);
+          if (updatedObj) {
+            if (data.id) updatedObj.id = data.id;
+            canvas.add(updatedObj);
+            canvas.renderAll();
+          }
+        } catch (err) {
+          console.error("Error applying remote object-modified:", err);
         }
       });
 
@@ -599,6 +650,12 @@ function Room() {
           try {
             await canvas.loadFromJSON(canvasData);
             canvas.backgroundColor = "#ffffff";
+            // Assign deterministic IDs if any object lacks one
+            canvas.getObjects().forEach((obj, idx) => {
+              if (!obj.id) {
+                obj.id = `obj_${idx}_${obj.type}`;
+              }
+            });
             canvas.renderAll();
           } catch (err) {
             console.error("Error loading canvas state:", err);
@@ -613,17 +670,18 @@ function Room() {
       });
     }
 
-    // Handle delete/backspace key to remove selected objects
+    // Handle delete/backspace key and arrow keys to move selected objects
     const handleKeyDown = (e) => {
+      const activeObj = canvas.getActiveObject();
+      const isInput =
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA" ||
+        activeObj?.isEditing;
+
+      if (isInput) return;
+
       if (e.key === "Delete" || e.key === "Backspace") {
-        const activeObj = canvas.getActiveObject();
-        // Don't delete if actively typing in text object or an input field
-        if (
-          activeObj &&
-          !activeObj.isEditing &&
-          e.target.tagName !== "INPUT" &&
-          e.target.tagName !== "TEXTAREA"
-        ) {
+        if (activeObj) {
           e.preventDefault();
           const objectId = activeObj.id;
           canvas.remove(activeObj);
@@ -632,6 +690,38 @@ function Room() {
 
           if (objectId && socketRef.current) {
             socketRef.current.emit("delete-object", { roomId, objectId });
+          }
+          debouncedSaveCanvas();
+        }
+      } else if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+      ) {
+        if (activeObj) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 2;
+          let dx = 0;
+          let dy = 0;
+          if (e.key === "ArrowUp") dy = -step;
+          if (e.key === "ArrowDown") dy = step;
+          if (e.key === "ArrowLeft") dx = -step;
+          if (e.key === "ArrowRight") dx = step;
+
+          activeObj.set({
+            left: activeObj.left + dx,
+            top: activeObj.top + dy,
+          });
+          activeObj.setCoords();
+          canvas.renderAll();
+
+          if (!activeObj.id) {
+            activeObj.id = generateId(activeObj.type?.toLowerCase() || "obj");
+          }
+
+          if (socketRef.current) {
+            socketRef.current.emit("object-modified", {
+              roomId,
+              objectData: JSON.stringify(activeObj.toObject()),
+            });
           }
           debouncedSaveCanvas();
         }
@@ -672,6 +762,7 @@ function Room() {
         socket.off("draw");
         socket.off("draw-update");
         socket.off("draw-end");
+        socket.off("object-modified");
         socket.off("delete-object");
         socket.off("canvas-state");
         socket.off("clear-canvas");
