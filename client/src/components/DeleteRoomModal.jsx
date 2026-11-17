@@ -62,7 +62,7 @@ function DeleteRoomModal({ roomId, roomName, onClose, socketRef }) {
 
         <div className="mb-6">
           <p className="text-gray-800 mb-3">
-            Are you sure you want to delete <strong>"{roomName}"</strong>?
+            Are you sure you want to delete <strong>&ldquo;{roomName}&rdquo;</strong>?
           </p>
           <p className="text-gray-600 mb-4 text-sm">
             This action cannot be undone. All drawings, chat history, and board

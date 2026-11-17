@@ -35,10 +35,11 @@ function Home() {
   const handleCreateRoom = async (roomData) => {
     try {
       setError("");
-      const response = await axios.post(
-        `${API_BASE_URL}/create-room`,
-        roomData
-      );
+      const username = localStorage.getItem("username") || "Anonymous";
+      const response = await axios.post(`${API_BASE_URL}/create-room`, {
+        ...roomData,
+        createdBy: username,
+      });
       navigate(`/room/${response.data.roomId}`);
     } catch (error) {
       console.error("Error creating room:", error);

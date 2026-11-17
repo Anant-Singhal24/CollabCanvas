@@ -11,6 +11,10 @@ const RoomSchema = new mongoose.Schema({
     enum: ["public", "private"],
     default: "public",
   },
+  createdBy: {
+    type: String,
+    default: "Anonymous",
+  },
   users: [
     {
       socketId: String,

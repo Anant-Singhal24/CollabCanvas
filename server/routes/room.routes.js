@@ -1,13 +1,14 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Room = require("../models/Room");
 
 // Create a new room
 router.post("/create-room", async (req, res) => {
   try {
-    const { name, accessLevel = "public" } = req.body;
+    const { name, accessLevel = "public", createdBy = "Anonymous" } = req.body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
         message: "Room name is required",
@@ -15,8 +16,9 @@ router.post("/create-room", async (req, res) => {
     }
 
     const newRoom = new Room({
-      name,
+      name: name.trim(),
       accessLevel,
+      createdBy: createdBy || "Anonymous",
       users: [],
     });
 
@@ -71,6 +73,14 @@ router.get("/public-rooms", async (req, res) => {
 router.get("/room/:roomId", async (req, res) => {
   try {
     const { roomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(roomId)) {
+      return res.status(404).json({
+        success: false,
+        message: "Room not found",
+      });
+    }
+
     const room = await Room.findById(roomId);
 
     if (!room) {
@@ -86,6 +96,8 @@ router.get("/room/:roomId", async (req, res) => {
         id: room._id,
         name: room.name,
         accessLevel: room.accessLevel,
+        canvasData: room.canvasData || "",
+        createdBy: room.createdBy || "Anonymous",
         users: room.users,
         createdAt: room.createdAt,
       },
@@ -110,6 +122,13 @@ router.patch("/room/:roomId", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid access level",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(roomId)) {
+      return res.status(404).json({
+        success: false,
+        message: "Room not found",
       });
     }
 
@@ -149,6 +168,13 @@ router.patch("/room/:roomId", async (req, res) => {
 router.delete("/room/:roomId", async (req, res) => {
   try {
     const { roomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(roomId)) {
+      return res.status(404).json({
+        success: false,
+        message: "Room not found",
+      });
+    }
 
     const room = await Room.findById(roomId);
 

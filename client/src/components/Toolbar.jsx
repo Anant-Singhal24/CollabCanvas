@@ -17,7 +17,7 @@ function Toolbar({
   strokeWidth,
   onWidthChange,
   onClearCanvas,
-  onExportCanvas,
+  onExportCanvas: _onExportCanvas,
   onToggleSidebar,
   unreadMessages = 0,
 }) {
